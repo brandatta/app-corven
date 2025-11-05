@@ -125,7 +125,7 @@ if uploaded_file:
         st.error("No se encontró la columna **n** en el archivo. Revisá que el archivo tenga al menos 14 columnas (… m, **n**, o…).")
 
     # Confirmación
-    if st.button("Cargar y reemplazar tabla", type="primary"):
+    if st.button("Subir y actualizar repositorio", type="primary"):
         try:
             if df.empty:
                 st.warning("El archivo no tiene filas.")
