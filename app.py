@@ -60,7 +60,6 @@ else:
     </div>
     """, unsafe_allow_html=True)
 
-st.info("Al confirmar, se **reemplazan** los datos de `app_marco_new.modelo_ap` por los del archivo subido (TRUNCATE + LOAD).")
 
 # -------------------- Helpers --------------------
 def open_connection():
