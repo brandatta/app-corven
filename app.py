@@ -9,7 +9,7 @@ from PIL import Image
 import base64
 import io
 
-st.set_page_config(page_title="Subida CSV/XLSX → modelo_ap", layout="centered")
+st.set_page_config(page_title="Subida CSV/XLSX", layout="centered")
 
 # ---- Logo a base64 (opcional) ----
 def get_base64_logo(path="logorelleno.png"):
