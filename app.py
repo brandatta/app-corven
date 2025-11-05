@@ -12,7 +12,7 @@ import string
 
 st.set_page_config(page_title="Subida CSV/XLSX → modelo_ap", layout="centered")
 
-# ------------ Utilidades ------------
+# ---- Logo a base64 (opcional) ----
 def get_base64_logo(path="logorelleno.png"):
     try:
         img = Image.open(path).resize((40, 40))
@@ -22,48 +22,9 @@ def get_base64_logo(path="logorelleno.png"):
     except Exception:
         return None
 
-def open_connection():
-    return mysql.connector.connect(
-        host=st.secrets["DB_HOST"],
-        user=st.secrets["DB_USER"],
-        password=st.secrets["DB_PASSWORD"],
-        database=st.secrets["DB_NAME"],
-        charset="utf8mb4",
-        use_unicode=True,
-        allow_local_infile=True,
-        client_flags=[ClientFlag.LOCAL_FILES]
-    )
-
-def excel_letter_to_index(letter: str) -> int:
-    """
-    Convierte una letra de columna estilo Excel (A, B, ... Z, AA, AB, ...) a índice 0-based.
-    """
-    letter = letter.strip().upper()
-    val = 0
-    for ch in letter:
-        if not ('A' <= ch <= 'Z'):
-            raise ValueError("Solo letras A-Z")
-        val = val * 26 + (ord(ch) - ord('A') + 1)
-    return val - 1  # 0-based
-
-def make_excel_headers(n_cols: int):
-    """
-    Genera nombres tipo Excel A, B, ..., Z, AA, AB ... según cantidad de columnas.
-    """
-    headers = []
-    i = 1
-    while len(headers) < n_cols:
-        s, x = "", i
-        while x:
-            x, r = divmod(x - 1, 26)
-            s = chr(65 + r) + s
-        headers.append(s)
-        i += 1
-    return headers
-
 logo_b64 = get_base64_logo()
 
-# ------------ Estilos ------------
+# ---- Estilos ----
 st.markdown("""
     <style>
     .main { background-color: #d4fdb7 !important; }
@@ -84,7 +45,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ------------ Header ------------
+# ---- Header ----
 if logo_b64:
     st.markdown(f"""
     <div class="header-container">
@@ -99,39 +60,70 @@ else:
     </div>
     """, unsafe_allow_html=True)
 
-st.info("Al confirmar, se **reemplazan** los datos de `app_marco_new.modelo_ap` por los del archivo subido (TRUNCATE + LOAD). "
-        "Esta versión asume **archivos sin encabezados** (columnas tipo A, B, C...).")
+st.info("Al confirmar, se **reemplazan** los datos de `app_marco_new.modelo_ap` por los del archivo subido (TRUNCATE + LOAD).")
 
-# ------------ Lógica principal ------------
+# -------------------- Helpers --------------------
+def open_connection():
+    return mysql.connector.connect(
+        host=st.secrets["DB_HOST"],
+        user=st.secrets["DB_USER"],
+        password=st.secrets["DB_PASSWORD"],
+        database=st.secrets["DB_NAME"],
+        charset="utf8mb4",
+        use_unicode=True,
+        allow_local_infile=True,
+        client_flags=[ClientFlag.LOCAL_FILES]
+    )
+
+def gen_colnames(n_cols: int):
+    """
+    Genera nombres tipo a, b, c, ..., z, aa, ab, ... en minúscula.
+    """
+    names = []
+    alphabet = string.ascii_lowercase
+    base = len(alphabet)
+    for i in range(n_cols):
+        s = ""
+        x = i
+        while True:
+            s = alphabet[x % base] + s
+            x = x // base - 1
+            if x < 0:
+                break
+        names.append(s)
+    return names
+
+# -------------------- LÓGICA PRINCIPAL --------------------
 uploaded_file = st.file_uploader("Subí tu archivo CSV o XLSX (sin encabezados)", type=["csv", "xlsx"])
 
 if uploaded_file:
-    # Leer SIN encabezados → columnas 0..n-1
+    # Leer SIN encabezados
     if uploaded_file.name.lower().endswith(".csv"):
         df = pd.read_csv(uploaded_file, header=None)
     else:
+        # para xlsx sin encabezados
         df = pd.read_excel(uploaded_file, header=None)  # requiere openpyxl
 
-    # Renombrar columnas SOLO para visualización como letras Excel
-    excel_cols = make_excel_headers(df.shape[1])
-    df_display = df.copy()
-    df_display.columns = excel_cols
-
-    # --- Métricas inmediatas ---
-    st.write(f"**Filas detectadas:** {df.shape[0]}")
-    # Selector de columna (letra). Default 'N' si existe, sino primera.
-    default_letter = "N" if "N" in excel_cols else excel_cols[0]
-    col_letter = st.selectbox("Columna para sumar (letra estilo Excel)", options=excel_cols, index=excel_cols.index(default_letter))
-    try:
-        idx = excel_letter_to_index(col_letter)
-        suma_col = pd.to_numeric(df.iloc[:, idx], errors="coerce").sum()
-        st.write(f"**Suma de columna {col_letter}:** {suma_col:,.2f}")
-    except Exception as e:
-        st.warning(f"No pude calcular la suma de la columna {col_letter}: {e}")
+    # Renombrar columnas: a, b, c, ..., n, ...
+    df.columns = gen_colnames(df.shape[1])
 
     # Vista previa
     st.write("Vista previa del archivo:")
-    st.dataframe(df_display.head(100), use_container_width=True)
+    st.dataframe(df.head(100), use_container_width=True)
+
+    # Métricas inmediatas: filas y suma(columna 'n')
+    total_filas = len(df)
+    if 'n' in df.columns:
+        suma_n = pd.to_numeric(df['n'], errors='coerce').sum()
+        st.markdown(
+            f"<div style='color:#64352c; font-weight:bold; margin:10px 0;'>"
+            f"Filas detectadas: <strong>{total_filas}</strong> &nbsp;|&nbsp; "
+            f"Suma de <strong>n</strong>: <strong>{suma_n:.2f}</strong>"
+            f"</div>",
+            unsafe_allow_html=True
+        )
+    else:
+        st.error("No se encontró la columna **n** en el archivo. Revisá que el archivo tenga al menos 14 columnas (… m, **n**, o…).")
 
     # Confirmación
     if st.button("Cargar y reemplazar tabla", type="primary"):
@@ -139,9 +131,8 @@ if uploaded_file:
             if df.empty:
                 st.warning("El archivo no tiene filas.")
             else:
-                # Guardar a CSV temporal SIN encabezados (porque la tabla se carga por posición)
+                # Guardar CSV temporal sin encabezados (importa por posición)
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".csv", mode="w", encoding="utf-8", newline="\n") as tmp:
-                    # header=False: no escribimos encabezado
                     df.to_csv(tmp.name, index=False, header=False)
                     temp_path = tmp.name
 
@@ -152,7 +143,7 @@ if uploaded_file:
                 # 1) TRUNCATE
                 cur.execute("TRUNCATE TABLE `app_marco_new`.`modelo_ap`;")
 
-                # 2) LOAD DATA LOCAL INFILE por posición (sin lista de columnas)
+                # 2) LOAD DATA LOCAL INFILE (sin IGNORE 1 ROWS, porque no hay encabezados)
                 csv_path = temp_path.replace("\\", "\\\\")  # por si Windows
                 load_sql = f"""
                 LOAD DATA LOCAL INFILE '{csv_path}'
@@ -160,7 +151,7 @@ if uploaded_file:
                 CHARACTER SET utf8mb4
                 FIELDS TERMINATED BY ',' ENCLOSED BY '"' ESCAPED BY '"'
                 LINES TERMINATED BY '\\n';
-                """  # No usamos IGNORE 1 ROWS porque nuestro CSV NO tiene encabezados
+                """
                 cur.execute(load_sql)
                 conn.commit()
 
