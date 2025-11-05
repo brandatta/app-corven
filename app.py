@@ -10,7 +10,7 @@ import base64
 import io
 import string
 
-st.set_page_config(page_title="Subida CSV/XLSX → modelo_ap", layout="centered")
+st.set_page_config(page_title="Subida CSV/XLSX → ap_corven", layout="centered")
 
 # ---- Logo a base64 (opcional) ----
 def get_base64_logo(path="logorelleno.png"):
@@ -49,7 +49,7 @@ st.markdown("""
 if logo_b64:
     st.markdown(f"""
     <div class="header-container">
-        <div class="header-title">Subida de CSV/XLSX → <strong>app_marco_new.modelo_ap</strong></div>
+        <div class="header-title">Subida de CSV/XLSX → <strong>ap_corven</strong></div>
         <div class="header-logo"><img src="data:image/png;base64,{logo_b64}" /></div>
     </div>
     """, unsafe_allow_html=True)
