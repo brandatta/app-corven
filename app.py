@@ -1,3 +1,4 @@
+# app.py
 import streamlit as st
 import pandas as pd
 import mysql.connector
@@ -82,7 +83,18 @@ if uploaded_file:
     else:
         df = pd.read_excel(uploaded_file)  # requiere openpyxl
 
-    # Vista previa
+    # Métricas inmediatas: filas + suma de columna 'n'
+    total_filas = len(df)
+    suma_n = None
+    if "n" in df.columns:
+        suma_n = pd.to_numeric(df["n"], errors="coerce").sum(skipna=True)
+
+    # Vista previa y métricas
+    left, right = st.columns(2)
+    left.metric("Filas detectadas en el archivo", f"{total_filas:,}".replace(",", "."))
+    right.metric("Suma de columna 'n'" if "n" in df.columns else "Columna 'n' no encontrada",
+                 f"{suma_n:,.2f}".replace(",", ".") if suma_n is not None else "—")
+
     st.write("Vista previa del archivo:")
     st.dataframe(df.head(100), use_container_width=True)
 
@@ -93,7 +105,6 @@ if uploaded_file:
                 st.warning("El archivo no tiene filas.")
             else:
                 # Guardar a CSV temporal (con encabezados) para usar LOAD DATA
-                # (vamos a ignorar la primer fila con IGNORE 1 ROWS)
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".csv", mode="w", encoding="utf-8", newline="\n") as tmp:
                     df.to_csv(tmp.name, index=False)
                     temp_path = tmp.name
@@ -105,8 +116,7 @@ if uploaded_file:
                 # 1) TRUNCATE
                 cur.execute("TRUNCATE TABLE `app_marco_new`.`modelo_ap`;")
 
-                # 2) LOAD DATA LOCAL INFILE sin lista de columnas
-                #    Carga por posición según el orden físico de la tabla.
+                # 2) LOAD DATA LOCAL INFILE (por posición; columnas del archivo en el mismo orden que la tabla)
                 csv_path = temp_path.replace("\\", "\\\\")  # por si Windows
                 load_sql = f"""
                 LOAD DATA LOCAL INFILE '{csv_path}'
