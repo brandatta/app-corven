@@ -1,4 +1,3 @@
-# app.py
 import streamlit as st
 import pandas as pd
 import mysql.connector
@@ -9,7 +8,7 @@ from PIL import Image
 import base64
 import io
 
-st.set_page_config(page_title="Subida CSV/XLSX", layout="centered")
+st.set_page_config(page_title="Subida CSV/XLSX → modelo_ap", layout="centered")
 
 # ---- Logo a base64 (opcional) ----
 def get_base64_logo(path="logorelleno.png"):
@@ -48,7 +47,7 @@ st.markdown("""
 if logo_b64:
     st.markdown(f"""
     <div class="header-container">
-        <div class="header-title">Subida de CSV/XLSX</div>
+        <div class="header-title">Subida de CSV/XLSX → <strong>app_marco_new.modelo_ap</strong></div>
         <div class="header-logo"><img src="data:image/png;base64,{logo_b64}" /></div>
     </div>
     """, unsafe_allow_html=True)
@@ -65,14 +64,6 @@ st.info("Al confirmar, se **reemplazan** los datos de `app_marco_new.modelo_ap` 
 uploaded_file = st.file_uploader("Subí tu archivo CSV o XLSX", type=["csv", "xlsx"])
 
 def open_connection():
-    # Asegurate de tener estos valores en .streamlit/secrets.toml
-    # [general]
-    # [connections.mysql]
-    # DB_HOST="..."
-    # DB_USER="..."
-    # DB_PASSWORD="..."
-    # DB_NAME="..."
-    # O bien en st.secrets directamente como abajo:
     return mysql.connector.connect(
         host=st.secrets["DB_HOST"],
         user=st.secrets["DB_USER"],
@@ -89,7 +80,7 @@ if uploaded_file:
     if uploaded_file.name.lower().endswith(".csv"):
         df = pd.read_csv(uploaded_file)
     else:
-        df = pd.read_excel(uploaded_file)
+        df = pd.read_excel(uploaded_file)  # requiere openpyxl
 
     # Vista previa
     st.write("Vista previa del archivo:")
@@ -102,6 +93,7 @@ if uploaded_file:
                 st.warning("El archivo no tiene filas.")
             else:
                 # Guardar a CSV temporal (con encabezados) para usar LOAD DATA
+                # (vamos a ignorar la primer fila con IGNORE 1 ROWS)
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".csv", mode="w", encoding="utf-8", newline="\n") as tmp:
                     df.to_csv(tmp.name, index=False)
                     temp_path = tmp.name
@@ -113,21 +105,16 @@ if uploaded_file:
                 # 1) TRUNCATE
                 cur.execute("TRUNCATE TABLE `app_marco_new`.`modelo_ap`;")
 
-                # 2) LOAD DATA LOCAL INFILE con mapeo de columnas por nombre
-                #    IMPORTANTE: los nombres de columna del archivo deben coincidir con los de la tabla.
-                cols = ", ".join(f"`{c}`" for c in df.columns.tolist())
-
-                # Fix path para Windows si aplica
-                csv_path = temp_path.replace("\\", "\\\\")
-
+                # 2) LOAD DATA LOCAL INFILE sin lista de columnas
+                #    Carga por posición según el orden físico de la tabla.
+                csv_path = temp_path.replace("\\", "\\\\")  # por si Windows
                 load_sql = f"""
                 LOAD DATA LOCAL INFILE '{csv_path}'
                 INTO TABLE `app_marco_new`.`modelo_ap`
                 CHARACTER SET utf8mb4
                 FIELDS TERMINATED BY ',' ENCLOSED BY '"' ESCAPED BY '"'
                 LINES TERMINATED BY '\\n'
-                IGNORE 1 ROWS
-                ({cols});
+                IGNORE 1 ROWS;
                 """
                 cur.execute(load_sql)
                 conn.commit()
